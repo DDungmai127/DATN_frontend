@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    font-family: "Arial", sans-serif;
+    background-color: #f9f9f9;
+}
+/* Modal chỉnh sửa */
+.edit-modal {
+    z-index: 10; /* Giá trị thấp hơn */
+}
+
+/* Modal xác nhận */
+.confirmation-modal {
+    z-index: 20; /* Giá trị cao hơn */
+}
