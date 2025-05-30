@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSignInAlt } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../Provider/AuthProvider";
@@ -11,16 +11,28 @@ const AdminLogin = () => {
   });
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const navigate = useNavigate();
+  const location = useLocation();
+  const redirectPath = location.state?.from || "/admin/dashboard";
 
-  const { isAuthenticated, loading, error, login } = useAuth();
+  // Props từ useAuth
+  const { isAuthenticated, loading, error, login, user } = useAuth();
 
-  // Chuyển hướng nếu đã đăng nhập
+  // Đọc error từ location state (chuyển hướng từ Layout)
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/admin/dashboard");
+    if (location.state?.accessError) {
+      setFormError(location.state.accessError);
+      // Xóa state để không hiển thị lại sau khi refresh
+      window.history.replaceState({}, document.title);
     }
-  }, [isAuthenticated, navigate]);
+  }, [location.state]);
+
+  console.log("AdminLogin render:", {
+    isAuthenticated,
+    loading,
+    hasUser: !!user,
+    userRole: user?.role,
+    locationState: location.state,
+  });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -46,9 +58,7 @@ const AdminLogin = () => {
     try {
       const result = await login(formData);
 
-      if (result.success) {
-        navigate("/admin/dashboard");
-      } else {
+      if (!result.success) {
         setFormError(result.message || "Đăng nhập thất bại");
       }
     } catch (error) {
@@ -58,6 +68,35 @@ const AdminLogin = () => {
       setIsSubmitting(false);
     }
   };
+
+  const debugLogin = () => {
+    const testAdmin = {
+      id: "debug-admin-id",
+      fullName: "Admin Debug",
+      role: "admin",
+      phoneNumber: "12072003",
+      token: "debug-token-" + Date.now(),
+      isLoggedIn: true,
+    };
+
+    try {
+      // Lưu vào localStorage
+      localStorage.setItem("adminInfo", JSON.stringify(testAdmin));
+      console.log("Debug admin info saved:", testAdmin);
+
+      alert("Debug login saved. Reloading page...");
+      window.location.reload();
+    } catch (e) {
+      console.error("Error saving debug admin:", e);
+      alert("Lỗi: " + e.message);
+    }
+  };
+
+  // QUAN TRỌNG: Kiểm tra cả quyền để tránh vòng lặp
+  if (isAuthenticated && !loading && user && (user.role === "admin" || user.role === "staff")) {
+    console.log("Authenticated with admin rights, redirecting to:", redirectPath);
+    return <Navigate to={redirectPath} replace />;
+  }
 
   if (loading) {
     return (
@@ -79,7 +118,6 @@ const AdminLogin = () => {
         )}
 
         <form onSubmit={handleLogin}>
-          {/* Form fields... */}
           <div className="mb-4">
             <label className="block text-gray-700 mb-2">Số điện thoại</label>
             <input

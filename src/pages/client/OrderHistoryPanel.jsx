@@ -26,17 +26,10 @@ const OrderHistoryPanel = ({ onViewDetails }) => {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        throw new Error("Bạn cần đăng nhập lại");
-      }
-
-      const response = await axios.get("http://localhost:3000/api/orders/user/history", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await axios.get("http://localhost:3000/api/orders/history", {
+        withCredentials: true,
       });
-
+      console.log("API response:", response.data);
       if (response.data.success) {
         setOrders(response.data.data || []);
       } else {

@@ -25,15 +25,13 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        throw new Error("Bạn cần đăng nhập lại");
-      }
+      // const token = localStorage.getItem("authToken");
+      // if (!token) {
+      //   throw new Error("Bạn cần đăng nhập lại");
+      // }
 
-      const response = await axios.get("http://localhost:3000/api/orders/user/current", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const response = await axios.get("http://localhost:3000/api/orders/current", {
+        withCredentials: true,
       });
 
       if (response.data.success) {
@@ -84,6 +82,13 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const calculateOrderTotal = (order) => {
+    // Tính tổng từ các orderItems
+    return order.orderItems.reduce((total, item) => {
+      return total + +item.amount;
+    }, 0);
   };
 
   // Lọc đơn hàng theo tìm kiếm
@@ -191,7 +196,7 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
               <div className="bg-gray-50 px-4 py-3 flex justify-between items-center">
                 <div className="flex items-center">
                   <span className="font-medium mr-2">Mã đơn:</span>
-                  <span>{order.orderCode}</span>
+                  <span>{order.orderId}</span>
                 </div>
                 <div
                   className={`px-3 py-1 rounded-full text-xs font-medium flex items-center ${getStatusClass(
@@ -208,7 +213,7 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div>
                     <p className="text-gray-600 text-sm">Người nhận</p>
-                    <p className="font-medium">{order.receiver}</p>
+                    <p className="font-medium">{order.customerName}</p>
                   </div>
                   <div>
                     <p className="text-gray-600 text-sm">Số điện thoại</p>
@@ -228,7 +233,9 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
                 <div className="flex flex-wrap justify-between items-center">
                   <div>
                     <p className="text-gray-600 text-sm">Tổng tiền</p>
-                    <p className="font-bold text-red-600">{formatPrice(order.totalPrice)}</p>
+                    <p className="font-bold text-red-600">
+                      {formatPrice(calculateOrderTotal(order))}
+                    </p>
                   </div>
 
                   <div className="flex gap-2 mt-2 sm:mt-0">
@@ -240,7 +247,7 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
                       Chi tiết
                     </button>
 
-                    {order.status === "Chờ xác nhận" && (
+                    {order.status === "Chờ xử lý" && (
                       <button
                         onClick={() => handleCancelOrder(order.orderId)}
                         className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"

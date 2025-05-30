@@ -4,6 +4,26 @@ import { faSpinner, faCheck } from "@fortawesome/free-solid-svg-icons";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
+// Hàm hỗ trợ để định dạng ngày tháng
+const formatDateForInput = (dateString) => {
+  if (!dateString) return "";
+
+  try {
+    const date = new Date(dateString);
+
+    // Kiểm tra ngày hợp lệ
+    if (isNaN(date.getTime())) {
+      return "";
+    }
+
+    // Format thành YYYY-MM-DD theo chuẩn HTML input date
+    return date.toISOString().split("T")[0];
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return "";
+  }
+};
+
 const ProfilePanel = ({ user, onProfileUpdate }) => {
   const navigate = useNavigate();
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
@@ -13,7 +33,7 @@ const ProfilePanel = ({ user, onProfileUpdate }) => {
     email: user?.email || "",
     address: user?.address || "",
     gender: user?.gender || "",
-    dateOfBirth: user?.dateOfBirth || "",
+    dateOfBirth: formatDateForInput(user?.dateOfBirth) || "",
     currentPassword: "",
     password: "",
     confirmPassword: "",
@@ -32,7 +52,7 @@ const ProfilePanel = ({ user, onProfileUpdate }) => {
         email: user.email || prev.email,
         address: user.address || prev.address,
         gender: user.gender || prev.gender,
-        dateOfBirth: user.dateOfBirth || prev.dateOfBirth,
+        dateOfBirth: formatDateForInput(user.dateOfBirth) || prev.dateOfBirth,
       }));
     }
   }, [user]);
@@ -103,7 +123,7 @@ const ProfilePanel = ({ user, onProfileUpdate }) => {
         email: formData.email,
         address: formData.address,
         gender: formData.gender,
-        dateOfBirth: formData.dateOfBirth,
+        dateOfBirth: formData.dateOfBirth, // Đã ở định dạng YYYY-MM-DD
       };
 
       if (formData.password) {
@@ -113,14 +133,29 @@ const ProfilePanel = ({ user, onProfileUpdate }) => {
 
       console.log(`Sending profile update request to /api/users/${userId}`);
 
+      // Thêm token vào header
+      const token = clientInfo.token;
+      const headers = {};
+
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await axios.put(`${API_URL}/users/${userId}`, updatedData, {
         withCredentials: true,
+        headers: headers,
       });
 
       if (response.data.success) {
+        // Đảm bảo định dạng ngày tháng trong dữ liệu nhận về cũng được chuẩn hóa
+        const responseData = response.data.data;
+        if (responseData.dateOfBirth) {
+          responseData.dateOfBirth = formatDateForInput(responseData.dateOfBirth);
+        }
+
         const updatedUserInfo = {
           ...clientInfo,
-          ...response.data.data,
+          ...responseData,
           isLoggedIn: true,
         };
         localStorage.setItem("clientInfo", JSON.stringify(updatedUserInfo));
@@ -151,7 +186,12 @@ const ProfilePanel = ({ user, onProfileUpdate }) => {
 
       if (error.response) {
         if (error.response.status === 401) {
-          setError("Bạn cần đăng nhập lại");
+          setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+
+          // Thêm log chi tiết để debug
+          console.log("401 error response:", error.response.data);
+          console.log("Headers sent:", error.config.headers);
+
           localStorage.removeItem("clientInfo");
           setTimeout(() => {
             navigate("/login?redirect=/account");
@@ -274,7 +314,7 @@ const ProfilePanel = ({ user, onProfileUpdate }) => {
               type="date"
               id="dateOfBirth"
               name="dateOfBirth"
-              value={formData.dateOfBirth}
+              value={formData.dateOfBirth} // Đã được format đúng
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             />

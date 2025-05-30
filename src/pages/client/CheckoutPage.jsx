@@ -11,24 +11,42 @@ import {
   faUniversity,
 } from "@fortawesome/free-solid-svg-icons";
 import axios from "axios";
-// Bỏ import useAuth vì đang gây lỗi
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
 
-  // Thay thế useAuth bằng truy cập localStorage trực tiếp
   const [user, setUser] = useState(null);
+  const [userLoading, setUserLoading] = useState(false);
 
-  // Tải thông tin user từ localStorage khi component mount
-  useEffect(() => {
-    const userInfo = localStorage.getItem("userInfo");
-    if (userInfo) {
-      try {
-        setUser(JSON.parse(userInfo));
-      } catch (error) {
-        console.error("Lỗi khi parse thông tin user:", error);
+  const fetchUserProfile = async () => {
+    try {
+      setUserLoading(true);
+
+      const response = await axios.get("http://localhost:3000/api/users/profile/me", {
+        withCredentials: true,
+      });
+
+      if (response.data.success && response.data.data) {
+        const userData = response.data.data;
+        setUser(userData);
+
+        setShippingInfo((prev) => ({
+          ...prev,
+          name: userData.fullName || userData.username || "",
+          phone: userData.phoneNumber || "",
+          address: userData.address || "",
+          email: userData.email || "",
+        }));
       }
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+    } finally {
+      setUserLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetchUserProfile();
   }, []);
 
   const [cartItems, setCartItems] = useState([]);
@@ -39,7 +57,6 @@ const CheckoutPage = () => {
     total: 0,
   });
 
-  // Thông tin giao hàng - cập nhật để tránh lỗi khi user chưa được load
   const [shippingInfo, setShippingInfo] = useState({
     name: "",
     phone: "",
@@ -48,38 +65,19 @@ const CheckoutPage = () => {
     note: "",
   });
 
-  // Cập nhật thông tin giao hàng khi user được load
-  useEffect(() => {
-    if (user) {
-      setShippingInfo((prev) => ({
-        ...prev,
-        name: user.fullName || user.username || "",
-        phone: user.phoneNumber || "",
-        address: user.address || "",
-        email: user.email || "",
-      }));
-    }
-  }, [user]);
-
-  // Phương thức giao hàng và thanh toán
   const [shippingMethod, setShippingMethod] = useState("standard");
   const [paymentMethod, setPaymentMethod] = useState("Tiền mặt");
-
-  // Ngày giờ giao hàng
   const [deliveryDate, setDeliveryDate] = useState("");
   const [deliveryTime, setDeliveryTime] = useState("");
-
-  // Trạng thái form
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderId, setOrderId] = useState(null);
   const [apiError, setApiError] = useState(null);
+  const [selectedStore, setSelectedStore] = useState(null);
 
-  // API URL
   const API_URL = "http://localhost:3000/api";
 
-  // Lấy giỏ hàng từ localStorage
   useEffect(() => {
     const savedCart = JSON.parse(localStorage.getItem("cart")) || [];
     if (savedCart.length === 0) {
@@ -89,21 +87,34 @@ const CheckoutPage = () => {
     }
     setCartItems(savedCart);
 
-    // Thiết lập ngày giao hàng mặc định (ngày mai)
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setDeliveryDate(tomorrow.toISOString().split("T")[0]);
-
-    // Thiết lập giờ giao hàng mặc định
     setDeliveryTime("10:00");
   }, [navigate]);
 
-  // Tính tổng tiền khi giỏ hàng hoặc phương thức vận chuyển thay đổi
   useEffect(() => {
     calculateCartSummary();
   }, [cartItems, shippingMethod]);
 
-  // Tính toán tổng tiền
+  useEffect(() => {
+    const fetchSelectedStore = async () => {
+      try {
+        const selectedStoreId = localStorage.getItem("selectedStoreId");
+        if (selectedStoreId) {
+          const response = await axios.get(`${API_URL}/stores/${selectedStoreId}`);
+          if (response.data && response.data.success) {
+            setSelectedStore(response.data.data);
+          }
+        }
+      } catch (error) {
+        console.error("Lỗi khi lấy thông tin cửa hàng:", error);
+      }
+    };
+
+    fetchSelectedStore();
+  }, [API_URL]);
+
   const calculateCartSummary = () => {
     const originalTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const finalSubtotal = cartItems.reduce((sum, item) => sum + item.finalPrice * item.quantity, 0);
@@ -121,7 +132,6 @@ const CheckoutPage = () => {
     });
   };
 
-  // Format giá tiền
   const formatPrice = (price) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -131,7 +141,6 @@ const CheckoutPage = () => {
     }).format(price);
   };
 
-  // Xử lý thay đổi input
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setShippingInfo({ ...shippingInfo, [name]: value });
@@ -140,11 +149,9 @@ const CheckoutPage = () => {
     }
   };
 
-  // Kiểm tra form trước khi đặt hàng
   const validateForm = () => {
     const errors = {};
 
-    // Kiểm tra thông tin giao hàng
     if (!shippingInfo.name.trim()) {
       errors.name = "Vui lòng nhập họ tên";
     }
@@ -163,7 +170,6 @@ const CheckoutPage = () => {
       errors.email = "Email không hợp lệ";
     }
 
-    // Kiểm tra ngày giờ giao hàng
     if (!deliveryDate) {
       errors.deliveryDate = "Vui lòng chọn ngày giao hàng";
     } else {
@@ -183,13 +189,20 @@ const CheckoutPage = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Xử lý đặt hàng
   const handleOrder = async () => {
-    // Reset lỗi API trước khi submit
     setApiError(null);
 
-    // Kiểm tra form
     if (!validateForm()) {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+      return;
+    }
+
+    const selectedStoreId = localStorage.getItem("selectedStoreId");
+    if (!selectedStoreId) {
+      setApiError("Vui lòng chọn cửa hàng để đặt hàng");
       window.scrollTo({
         top: 0,
         behavior: "smooth",
@@ -200,7 +213,6 @@ const CheckoutPage = () => {
     setIsSubmitting(true);
 
     try {
-      // Chuẩn bị dữ liệu đơn hàng
       const orderData = {
         customerName: shippingInfo.name,
         phoneNumber: shippingInfo.phone,
@@ -208,6 +220,7 @@ const CheckoutPage = () => {
         deliveryDay: deliveryDate,
         deliveryTime: deliveryTime,
         paymentMethod: paymentMethod,
+        storeId: selectedStoreId,
         orderItems: cartItems.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
@@ -217,27 +230,20 @@ const CheckoutPage = () => {
         })),
       };
 
-      // Nếu người dùng đã đăng nhập, thêm userId
+      if (shippingInfo.note) {
+        orderData.note = shippingInfo.note;
+      }
+
       if (user?.userId) {
         orderData.userId = user.userId;
       }
 
-      // Cài đặt headers với token nếu đã đăng nhập
-      // const config = {};
-      // if (user?.token) {
-      //   config.headers = {
-      //     Authorization: `Bearer ${user.token}`,
-      //   };
-      // }
-
-      // Gọi API tạo đơn hàng
       const response = await axios.post(`${API_URL}/orders`, orderData, { withCredentials: true });
 
-      // Xử lý kết quả thành công
       if (response.data.success) {
         setOrderSuccess(true);
         setOrderId(response.data.data.orderId || response.data.data.displayId);
-        localStorage.removeItem("cart"); // Xóa giỏ hàng sau khi đặt hàng thành công
+        localStorage.removeItem("cart");
       } else {
         throw new Error(response.data.message || "Có lỗi xảy ra khi đặt hàng");
       }
@@ -257,8 +263,6 @@ const CheckoutPage = () => {
     }
   };
 
-  // Phần còn lại code giữ nguyên
-  // Hiển thị trang thành công
   if (orderSuccess) {
     return (
       <div className="min-h-screen bg-gray-100 py-16">
@@ -324,7 +328,6 @@ const CheckoutPage = () => {
           <h1 className="text-2xl font-bold text-gray-800 ml-4">Thanh toán</h1>
         </div>
 
-        {/* Thông báo lỗi API nếu có */}
         {apiError && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
             <p>{apiError}</p>
@@ -335,6 +338,46 @@ const CheckoutPage = () => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Thông tin giao hàng</h2>
+
+              {userLoading ? (
+                <div className="flex items-center justify-center py-3 mb-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600 mr-2"></div>
+                  <span className="text-gray-600">Đang tải thông tin...</span>
+                </div>
+              ) : user ? (
+                <div className="bg-gray-50 p-4 rounded-lg mb-4 border border-gray-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium">Thông tin tài khoản của bạn</h3>
+                    <button
+                      onClick={() => {
+                        setShippingInfo({
+                          name: user.fullName || user.username || "",
+                          phone: user.phoneNumber || "",
+                          address: user.address || "",
+                          email: user.email || "",
+                          note: shippingInfo.note,
+                        });
+                      }}
+                      type="button"
+                      className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                    >
+                      Áp dụng
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    <p>
+                      <strong>Họ tên:</strong> {user.fullName || user.username || "Chưa cập nhật"}
+                    </p>
+                    <p>
+                      <strong>Số điện thoại:</strong> {user.phoneNumber || "Chưa cập nhật"}
+                    </p>
+                    <p>
+                      <strong>Địa chỉ:</strong> {user.address || "Chưa cập nhật"}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Họ và tên*</label>
@@ -407,7 +450,6 @@ const CheckoutPage = () => {
                   )}
                 </div>
 
-                {/* Ngày và giờ giao hàng */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     <FontAwesomeIcon icon={faCalendarAlt} className="mr-2" />
@@ -634,6 +676,23 @@ const CheckoutPage = () => {
                   <span className="text-gray-600">Phí vận chuyển:</span>
                   <span className="font-medium">{formatPrice(cartSummary.shippingFee)}</span>
                 </div>
+
+                <div className="border-t border-gray-200 pt-2 mt-2 mb-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Cửa hàng:</span>
+                    {selectedStore ? (
+                      <span className="font-medium">{selectedStore.storeName}</span>
+                    ) : (
+                      <Link to="/" className="text-red-600 hover:text-red-700">
+                        Vui lòng chọn cửa hàng
+                      </Link>
+                    )}
+                  </div>
+                  {selectedStore && (
+                    <p className="text-sm text-gray-500 mt-1">{selectedStore.storeAddress}</p>
+                  )}
+                </div>
+
                 <div className="border-t border-gray-200 pt-2 mt-2">
                   <div className="flex justify-between">
                     <span className="text-lg font-medium">Tổng cộng:</span>

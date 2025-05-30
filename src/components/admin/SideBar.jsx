@@ -10,6 +10,8 @@ import {
   faSignInAlt,
   faSignOutAlt,
   faTag,
+  faStore,
+  faWarehouse,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../Provider/AuthProvider";
 
@@ -45,6 +47,7 @@ const Sidebar = ({ isAdmin = false }) => {
     { to: "/admin/products", icon: faBoxes, label: "Sản phẩm" },
     { to: "/admin/users", icon: faUsers, label: "Người dùng" },
     { to: "/admin/discounts", icon: faTag, label: "Mã giảm giá" },
+    { to: "/admin/stores", icon: faStore, label: "Quản lý kho" },
     { to: "/admin/orders", icon: faShoppingCart, label: "Đơn hàng" },
   ];
 
