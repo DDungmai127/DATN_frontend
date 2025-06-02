@@ -60,15 +60,9 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
         throw new Error("Bạn cần đăng nhập lại");
       }
 
-      const response = await axios.post(
-        `http://localhost:3000/api/orders/${orderId}/cancel`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await axios.post(`http://localhost:3000/api/orders/${orderId}/cancel`, {
+        withCredentials: true,
+      });
 
       if (response.data.success) {
         // Loại bỏ đơn đã hủy khỏi danh sách đơn hàng đang đặt
@@ -109,15 +103,22 @@ const CurrentOrdersPanel = ({ onViewDetails }) => {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(price);
   };
 
+  // Phiên bản đơn giản chỉ lấy ngày/tháng/năm
   const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+
     const date = new Date(dateString);
-    return new Intl.DateTimeFormat("vi-VN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
+
+    // Kiểm tra nếu date không hợp lệ
+    if (isNaN(date.getTime())) return "N/A";
+
+    // Lấy ngày, tháng, năm và thêm số 0 phía trước nếu cần
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0"); // Tháng bắt đầu từ 0
+    const year = date.getFullYear();
+
+    // Trả về định dạng dd/mm/yyyy
+    return `${day}/${month}/${year}`;
   };
 
   const getStatusIcon = (status) => {

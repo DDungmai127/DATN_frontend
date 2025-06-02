@@ -66,15 +66,22 @@ const OrderDetailPanel = ({ orderId, onBack }) => {
     }).format(price);
   };
 
+  // Phiên bản đơn giản chỉ lấy ngày/tháng/năm
   const formatDate = (dateString) => {
-    const options = {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    };
-    return new Date(dateString).toLocaleDateString("vi-VN", options);
+    if (!dateString) return "N/A";
+
+    const date = new Date(dateString);
+
+    // Kiểm tra nếu date không hợp lệ
+    if (isNaN(date.getTime())) return "N/A";
+
+    // Lấy ngày, tháng, năm và thêm số 0 phía trước nếu cần
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0"); // Tháng bắt đầu từ 0
+    const year = date.getFullYear();
+
+    // Trả về định dạng dd/mm/yyyy
+    return `${day}/${month}/${year}`;
   };
 
   const calculateTotalAmount = (items) => {
@@ -243,7 +250,7 @@ const OrderDetailPanel = ({ orderId, onBack }) => {
           </h3>
           <p className="text-gray-600">
             <span className="font-medium">Ngày giao:</span>{" "}
-            {order.deliveryDay || "Không có thông tin"}
+            {formatDate(order.deliveryDay) || "Không có thông tin"}
           </p>
           <p className="text-gray-600 mt-1">
             <span className="font-medium">Giờ giao:</span>{" "}

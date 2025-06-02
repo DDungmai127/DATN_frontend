@@ -105,7 +105,7 @@ const CategoryPage = () => {
             : `${API_URL}/products/category/${categoryId}`;
 
         const productsResponse = await axios.get(`${endpoint}?${params.toString()}`);
-
+        console.log(`${endpoint}?${params.toString()}`);
         // Xử lý kết quả
         if (productsResponse.data.success) {
           setProducts(productsResponse.data.data || []);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faAngleDown,
@@ -18,6 +19,7 @@ const CategoryBar = () => {
   const [showMore, setShowMore] = useState(false);
   const [visibleCategories, setVisibleCategories] = useState([]);
   const [hiddenCategories, setHiddenCategories] = useState([]);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
 
   // Refs
   const scrollContainerRef = useRef(null);
@@ -122,6 +124,12 @@ const CategoryBar = () => {
     }
   };
 
+  const handleMoreHover = (event) => {
+    const rect = event.target.getBoundingClientRect();
+    setDropdownPosition({ top: rect.bottom, left: rect.left });
+    setShowMore(true);
+  };
+
   // Scroll functions
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
@@ -149,16 +157,17 @@ const CategoryBar = () => {
     }, {});
   };
 
-  // Render dropdown content
+  // Render dropdown content sử dụng Portal
   const renderDropdownContent = (category) => {
     const details = detailCategories[category.categoryId];
-
     if (!details || details.length === 0) return null;
 
+    const categoryElement = categoryRefs.current[category.categoryId];
+    if (!categoryElement) return null;
+
+    const rect = categoryElement.getBoundingClientRect();
     const groupedDetails = groupDetailCategoriesByType(details);
     const detailTypes = Object.keys(groupedDetails);
-
-    // Tìm kiếm key "Phân Loại" với nhiều cách viết khác nhau
     const phanLoaiKey = detailTypes.find(
       (key) =>
         key
@@ -168,8 +177,26 @@ const CategoryBar = () => {
           .replace(/\s/g, "") === "phanloai"
     );
 
-    return (
-      <div className="absolute left-0 bg-white shadow-lg rounded-b-md z-50 border-t-2 border-red-500 w-[500px]">
+    const dropdownContent = (
+      <div
+        className="fixed bg-white shadow-lg rounded-b-md z-[1000] w-[500px]"
+        style={{
+          top: `${rect.bottom}px`,
+          left: `${rect.left}px`,
+          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+        }}
+      >
+        {/* Thanh đỏ phía trên */}
+        <div
+          className="h-0.5 bg-red-600 w-full"
+          style={{
+            width: rect.width,
+            position: "absolute",
+            top: "-0.5px",
+            left: 0,
+          }}
+        />
+
         <div className="flex">
           {/* Phần hiển thị hình ảnh danh mục */}
           <div className="w-1/3 p-4 flex flex-col items-center justify-center">
@@ -221,6 +248,8 @@ const CategoryBar = () => {
         </div>
       </div>
     );
+
+    return createPortal(dropdownContent, document.body);
   };
 
   if (loading) {
@@ -247,7 +276,7 @@ const CategoryBar = () => {
 
   return (
     <nav className="bg-white shadow-md sticky top-[80px] z-40">
-      <div className="container mx-auto relative">
+      <div className="container mx-auto relative overflow-visible">
         {/* Hiển thị danh mục theo chiều ngang với scroll */}
         <div className="flex items-center border-b relative">
           {/* Left scroll button */}
@@ -297,7 +326,7 @@ const CategoryBar = () => {
             {hiddenCategories.length > 0 && (
               <div
                 className="relative flex-shrink-0 ml-2"
-                onMouseEnter={() => setShowMore(true)}
+                onMouseEnter={handleMoreHover}
                 onMouseLeave={() => setShowMore(false)}
               >
                 <button className="py-3 px-4 flex items-center text-gray-700 hover:text-red-500 whitespace-nowrap">
@@ -307,7 +336,13 @@ const CategoryBar = () => {
 
                 {/* More categories dropdown */}
                 {showMore && (
-                  <div className="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-md z-50 border min-w-[200px] max-h-[400px] overflow-y-auto">
+                  <div
+                    className="fixed bg-white shadow-lg rounded-md z-[200] border min-w-[200px] max-h-[400px] overflow-y-auto"
+                    style={{
+                      top: dropdownPosition.top,
+                      left: dropdownPosition.left,
+                    }}
+                  >
                     <div className="py-2">
                       {hiddenCategories.map((category) => (
                         <div key={category.categoryId} className="relative hover:bg-gray-50">

@@ -50,6 +50,16 @@ const Dashboard = () => {
   const [chartTimeframe, setChartTimeframe] = useState("7days");
   const [loading, setLoading] = useState(true);
 
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(price);
+  };
+  const calculateOrderTotal = (order) => {
+    // Tính tổng từ các orderItems
+    return order.orderItems.reduce((total, item) => {
+      return total + +item.amount;
+    }, 0);
+  };
+
   // Fetch dữ liệu khi component mount hoặc timeframe thay đổi
   useEffect(() => {
     const fetchData = async () => {
@@ -96,43 +106,32 @@ const Dashboard = () => {
     fetchData();
   }, [chartTimeframe]);
 
-  // Format số tiền VND
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(amount || 0);
-  };
-
   // Lấy thông tin trạng thái đơn hàng
   const getStatusInfo = (status) => {
     status = String(status || "").toLowerCase();
     switch (status) {
-      case "completed":
-      case "delivered":
+      case "đã giao hàng":
         return {
           icon: faCheck,
           color: "text-green-500",
           bg: "bg-green-100",
           text: "Hoàn thành",
         };
-      case "processing":
-      case "pending":
+      case "chờ xử lý":
         return {
           icon: faClock,
           color: "text-blue-500",
           bg: "bg-blue-100",
           text: "Đang xử lý",
         };
-      case "shipped":
-      case "shipping":
+      case "đang giao hàng":
         return {
           icon: faTruck,
           color: "text-yellow-500",
           bg: "bg-yellow-100",
           text: "Đang giao hàng",
         };
-      case "cancelled":
+      case "đã hủy":
         return {
           icon: faTimesCircle,
           color: "text-red-500",
@@ -233,7 +232,7 @@ const Dashboard = () => {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                      <Tooltip formatter={(value) => formatPrice(value)} />
                       <Legend />
                       <Line
                         type="monotone"
@@ -267,18 +266,16 @@ const Dashboard = () => {
               <div className="space-y-4">
                 {recentOrders.length > 0 ? (
                   recentOrders.map((order) => {
+                    console.log(order.status);
                     const status = getStatusInfo(order.status);
+                    console.log(status);
                     return (
                       <div
                         key={order.orderId}
                         className="bg-gray-50 p-3 rounded-lg hover:bg-gray-100 transition"
                       >
                         <div className="flex justify-between items-center mb-2">
-                          <span className="font-medium">
-                            {typeof order.orderId === "string" && order.orderId.length > 8
-                              ? order.orderId.substring(0, 8)
-                              : `#${order.orderId}`}
-                          </span>
+                          <span className="font-medium">{order.orderId}</span>
                           <span
                             className={`px-2 py-1 rounded-full text-xs ${status.bg} ${status.color}`}
                           >
@@ -288,9 +285,12 @@ const Dashboard = () => {
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-600 truncate">
-                            {order.user?.fullName || "Khách hàng"}
+                            {order.customerName || "Khách hàng"}
                           </span>
-                          <span className="font-medium">{formatCurrency(order.totalAmount)}</span>
+                          <span className="font-medium">
+                            {" "}
+                            {formatPrice(calculateOrderTotal(order))}
+                          </span>
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
                           {order.createdAt

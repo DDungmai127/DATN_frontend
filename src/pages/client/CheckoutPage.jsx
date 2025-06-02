@@ -213,6 +213,23 @@ const CheckoutPage = () => {
     setIsSubmitting(true);
 
     try {
+      // Kiểm tra xem người dùng đã đăng nhập hay chưa
+      const clientInfoStr = localStorage.getItem("clientInfo");
+      let currentUser = user;
+
+      // Nếu không có thông tin user từ state, thử lấy từ localStorage
+      if (!currentUser && clientInfoStr) {
+        try {
+          const clientInfo = JSON.parse(clientInfoStr);
+          if (clientInfo && clientInfo.userId) {
+            currentUser = clientInfo;
+          }
+        } catch (err) {
+          console.error("Error parsing client info from localStorage:", err);
+        }
+      }
+
+      // Chuẩn bị dữ liệu đơn hàng
       const orderData = {
         customerName: shippingInfo.name,
         phoneNumber: shippingInfo.phone,
@@ -230,20 +247,29 @@ const CheckoutPage = () => {
         })),
       };
 
-      if (shippingInfo.note) {
-        orderData.note = shippingInfo.note;
+      // Thêm note nếu có
+      if (shippingInfo.note && shippingInfo.note.trim()) {
+        orderData.note = shippingInfo.note.trim();
       }
 
-      if (user?.userId) {
-        orderData.userId = user.userId;
+      // Thêm userId nếu người dùng đã đăng nhập
+      if (currentUser?.userId) {
+        orderData.userId = currentUser.userId;
+        console.log("Adding userId to order:", currentUser.userId);
       }
 
+      // Kiểm tra thêm nếu có email
+      if (shippingInfo.email && shippingInfo.email.trim()) {
+        orderData.email = shippingInfo.email.trim();
+      }
+
+      console.log("Submitting order data:", orderData);
       const response = await axios.post(`${API_URL}/orders`, orderData, { withCredentials: true });
 
       if (response.data.success) {
         setOrderSuccess(true);
         setOrderId(response.data.data.orderId || response.data.data.displayId);
-        localStorage.removeItem("cart");
+        localStorage.removeItem("cart"); // Xóa giỏ hàng sau khi đặt hàng thành công
       } else {
         throw new Error(response.data.message || "Có lỗi xảy ra khi đặt hàng");
       }
@@ -501,20 +527,6 @@ const CheckoutPage = () => {
                     <p className="text-red-500 text-xs mt-1">{formErrors.deliveryTime}</p>
                   )}
                 </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Ghi chú (không bắt buộc)
-                  </label>
-                  <textarea
-                    name="note"
-                    value={shippingInfo.note}
-                    onChange={handleInputChange}
-                    placeholder="Yêu cầu đặc biệt về đơn hàng"
-                    rows={3}
-                    className="border border-gray-300 rounded-lg px-4 py-2 w-full"
-                  />
-                </div>
               </div>
 
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Phương thức vận chuyển</h2>
@@ -530,10 +542,10 @@ const CheckoutPage = () => {
                   />
                   <div className="flex-grow">
                     <p className="font-medium">Giao hàng tiêu chuẩn</p>
-                    <p className="text-sm text-gray-500">Nhận hàng trong 3-5 ngày</p>
+                    <p className="text-sm text-gray-500">Nhận hàng trong 1-2 ngày</p>
                   </div>
                   <span className="font-medium">
-                    {cartSummary.finalSubtotal >= 300000 ? "Miễn phí" : formatPrice(30000)}
+                    {cartSummary.finalSubtotal >= 300000 ? "Miễn phí" : formatPrice(15000)}
                   </span>
                 </label>
                 <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
@@ -547,10 +559,10 @@ const CheckoutPage = () => {
                   />
                   <div className="flex-grow">
                     <p className="font-medium">Giao hàng nhanh</p>
-                    <p className="text-sm text-gray-500">Nhận hàng trong 1-2 ngày</p>
+                    <p className="text-sm text-gray-500">Nhận hàng trong ngày</p>
                   </div>
                   <span className="font-medium">
-                    {cartSummary.finalSubtotal >= 300000 ? "Miễn phí" : formatPrice(50000)}
+                    {cartSummary.finalSubtotal >= 300000 ? "Miễn phí" : formatPrice(30000)}
                   </span>
                 </label>
                 {cartSummary.finalSubtotal >= 300000 && (

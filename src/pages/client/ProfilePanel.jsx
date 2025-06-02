@@ -23,7 +23,6 @@ const formatDateForInput = (dateString) => {
     return "";
   }
 };
-
 const ProfilePanel = ({ user, onProfileUpdate }) => {
   const navigate = useNavigate();
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
@@ -314,7 +313,7 @@ const ProfilePanel = ({ user, onProfileUpdate }) => {
               type="date"
               id="dateOfBirth"
               name="dateOfBirth"
-              value={formData.dateOfBirth} // Đã được format đúng
+              value={formatDateForInput(formData.dateOfBirth)} // Đã được format đúng
               onChange={handleChange}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             />

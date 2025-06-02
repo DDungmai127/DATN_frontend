@@ -174,7 +174,7 @@ const Register = () => {
             name="phoneNumber"
             value={formData.phoneNumber}
             onChange={handleChange}
-            placeholder="Nhập số điện thoại (10 số)"
+            placeholder="Nhập số điện thoại"
             label="Số điện thoại"
             error={fieldErrors.phoneNumber}
           />
