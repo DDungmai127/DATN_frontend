@@ -50,6 +50,11 @@ const Dashboard = () => {
   const [chartTimeframe, setChartTimeframe] = useState("7days");
   const [loading, setLoading] = useState(true);
 
+  // Thêm state mới
+  const [storeList, setStoreList] = useState([]);
+  const [storeRevenueData, setStoreRevenueData] = useState([]);
+  const [selectedStoreId, setSelectedStoreId] = useState("all");
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(price);
   };
@@ -65,36 +70,92 @@ const Dashboard = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Chỉ fetch những API cần thiết cho dashboard đơn giản
+        // Fetch dữ liệu đơn hàng, sản phẩm và cửa hàng
         const [productsRes, ordersRes, storesRes] = await Promise.all([
           axios.get(`${API_URL}/products?limit=1`, { withCredentials: true }),
-          axios.get(`${API_URL}/orders/all?page=1&limit=5`, { withCredentials: true }),
-          axios.get(`${API_URL}/stores?limit=1`, { withCredentials: true }),
+          axios.get(`${API_URL}/orders/all?page=1&limit=100`, { withCredentials: true }),
+          axios.get(`${API_URL}/stores`, { withCredentials: true }), // Lấy tất cả cửa hàng
         ]);
 
         // Cập nhật thống kê cơ bản
         setStats((prevStats) => ({
           ...prevStats,
           products: productsRes.data.pagination?.totalItems || 0,
-          stores: storesRes.data.pagination?.totalItems || 0,
-          // Các thống kê khác giữ nguyên giá trị mặc định
+          stores: storesRes.data.data?.length || 0,
         }));
 
-        // Cập nhật đơn hàng gần đây
-        setRecentOrders(ordersRes.data.data || []);
+        // Lưu danh sách cửa hàng
+        if (storesRes.data && storesRes.data.data) {
+          setStoreList(storesRes.data.data);
+        }
 
-        // Thử fetch dữ liệu doanh thu nếu API có sẵn
+        // Lọc đơn hàng trong 7 ngày gần nhất
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        const recentOrdersData = (ordersRes.data.data || []).filter((order) => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= oneWeekAgo;
+        });
+
+        // Cập nhật đơn hàng gần đây
+        setRecentOrders(recentOrdersData);
+
+        // LỌC NHỮNG ĐƠN HÀNG ĐÃ GIAO HÀNG để tính doanh thu
+        const completedOrders = ordersRes.data.data.filter(
+          (order) => order.status?.toLowerCase() === "đã giao hàng"
+        );
+
+        // Tính tổng doanh thu từ đơn hàng đã giao
+        const totalRevenue = completedOrders.reduce((sum, order) => {
+          return sum + calculateOrderTotal(order);
+        }, 0);
+
+        // Cập nhật tổng doanh thu
+        setStats((prevStats) => ({
+          ...prevStats,
+          revenue: totalRevenue,
+        }));
+
+        // Tạo dữ liệu doanh thu theo ngày từ đơn hàng đã hoàn thành
         try {
-          const revenueRes = await axios.get(
-            `${API_URL}/orders/statistics/revenue?timeframe=${chartTimeframe}`,
-            { withCredentials: true }
-          );
-          if (revenueRes.data && revenueRes.data.data) {
+          // Nếu có API cho doanh thu
+          const revenueRes = await axios
+            .get(
+              `${API_URL}/orders/statistics/revenue?timeframe=${chartTimeframe}&status=Đã giao hàng`,
+              { withCredentials: true }
+            )
+            .catch(() => null);
+
+          if (revenueRes?.data && revenueRes.data.data) {
             setRevenueData(revenueRes.data.data);
+          } else {
+            // Tạo dữ liệu doanh thu từ đơn hàng đã hoàn thành
+            createRevenueDataFromOrders(completedOrders);
+          }
+
+          // Thử lấy doanh thu theo cửa hàng nếu API có
+          const storeRevenueRes = await axios
+            .get(
+              `${API_URL}/orders/statistics/revenue-by-store?timeframe=${chartTimeframe}&status=Đã giao hàng`,
+              { withCredentials: true }
+            )
+            .catch(() => null);
+
+          if (storeRevenueRes?.data && storeRevenueRes.data.data) {
+            setStoreRevenueData(storeRevenueRes.data.data);
+          } else {
+            // Tạo dữ liệu doanh thu theo cửa hàng từ đơn hàng đã hoàn thành
+            createStoreRevenueDataFromOrders(completedOrders, storesRes.data.data);
           }
         } catch (err) {
-          console.warn("Không thể lấy dữ liệu doanh thu:", err);
-          setRevenueData([]);
+          console.warn("Không thể lấy dữ liệu doanh thu từ API:", err);
+          // Tạo dữ liệu doanh thu từ đơn hàng đã hoàn thành
+          createRevenueDataFromOrders(completedOrders);
+          // Tạo dữ liệu doanh thu theo cửa hàng
+          if (storesRes.data && storesRes.data.data) {
+            createStoreRevenueDataFromOrders(completedOrders, storesRes.data.data);
+          }
         }
       } catch (error) {
         console.error("Lỗi khi lấy dữ liệu dashboard:", error);
@@ -103,8 +164,149 @@ const Dashboard = () => {
       }
     };
 
+    // Hàm tạo dữ liệu doanh thu theo ngày từ đơn hàng đã hoàn thành
+    const createRevenueDataFromOrders = (completedOrders) => {
+      // Lấy thông tin ngày bắt đầu dựa vào timeframe
+      const getStartDate = () => {
+        const today = new Date();
+        switch (chartTimeframe) {
+          case "30days":
+            const date30DaysAgo = new Date(today);
+            date30DaysAgo.setDate(today.getDate() - 30);
+            return date30DaysAgo;
+          case "3months":
+            const date3MonthsAgo = new Date(today);
+            date3MonthsAgo.setMonth(today.getMonth() - 3);
+            return date3MonthsAgo;
+          case "7days":
+          default:
+            const date7DaysAgo = new Date(today);
+            date7DaysAgo.setDate(today.getDate() - 7);
+            return date7DaysAgo;
+        }
+      };
+
+      // Tạo mảng ngày từ startDate đến ngày hiện tại
+      const startDate = getStartDate();
+      const dateArray = [];
+      const currentDate = new Date();
+
+      // Tạo mảng các ngày trong khoảng thời gian
+      for (let dt = new Date(startDate); dt <= currentDate; dt.setDate(dt.getDate() + 1)) {
+        dateArray.push(new Date(dt).toISOString().split("T")[0]);
+      }
+
+      // Khởi tạo dữ liệu với doanh thu là 0 cho mỗi ngày
+      const revenueByDate = {};
+      dateArray.forEach((date) => {
+        revenueByDate[date] = 0;
+      });
+
+      // Tính tổng doanh thu cho mỗi ngày từ các đơn hàng đã hoàn thành
+      completedOrders.forEach((order) => {
+        // Chỉ xử lý đơn hàng đã giao hàng
+        if (order.status?.toLowerCase() === "đã giao hàng") {
+          // Lấy ngày từ createdAt hoặc updatedAt (tùy vào logic kinh doanh)
+          // Ở đây tôi sử dụng updatedAt vì đó là khi đơn hàng được cập nhật thành "Đã giao hàng"
+          const orderDate = order.updatedAt
+            ? new Date(order.updatedAt).toISOString().split("T")[0]
+            : new Date(order.createdAt).toISOString().split("T")[0];
+
+          // Chỉ tính doanh thu cho những ngày trong khoảng thời gian được chọn
+          if (revenueByDate[orderDate] !== undefined) {
+            revenueByDate[orderDate] += calculateOrderTotal(order);
+          }
+        }
+      });
+
+      // Chuyển đổi dữ liệu sang định dạng mảng cho biểu đồ
+      const revenueData = Object.keys(revenueByDate).map((date) => ({
+        date: date,
+        revenue: revenueByDate[date],
+      }));
+
+      setRevenueData(revenueData);
+    };
+
+    // Hàm mới để tạo dữ liệu doanh thu theo cửa hàng
+    const createStoreRevenueDataFromOrders = (completedOrders, stores) => {
+      // Lấy thông tin ngày bắt đầu dựa vào timeframe (giữ nguyên code của bạn)
+      const getStartDate = () => {
+        const today = new Date();
+        switch (chartTimeframe) {
+          case "30days":
+            const date30DaysAgo = new Date(today);
+            date30DaysAgo.setDate(today.getDate() - 30);
+            return date30DaysAgo;
+          case "3months":
+            const date3MonthsAgo = new Date(today);
+            date3MonthsAgo.setMonth(today.getMonth() - 3);
+            return date3MonthsAgo;
+          case "7days":
+          default:
+            const date7DaysAgo = new Date(today);
+            date7DaysAgo.setDate(today.getDate() - 7);
+            return date7DaysAgo;
+        }
+      };
+
+      // Tạo mảng ngày từ startDate đến ngày hiện tại
+      const startDate = getStartDate();
+      const dateArray = [];
+      const currentDate = new Date();
+
+      // Tạo mảng các ngày trong khoảng thời gian
+      for (let dt = new Date(startDate); dt <= currentDate; dt.setDate(dt.getDate() + 1)) {
+        dateArray.push(new Date(dt).toISOString().split("T")[0]);
+      }
+
+      // Tạo cấu trúc dữ liệu cho doanh thu theo cửa hàng
+      const storeRevenueByDate = {};
+
+      // Khởi tạo dữ liệu với doanh thu 0 cho mỗi cửa hàng trên mỗi ngày
+      dateArray.forEach((date) => {
+        storeRevenueByDate[date] = {
+          date: date,
+          total: 0, // Tổng doanh thu của ngày
+        };
+
+        // Thêm giá trị 0 cho mỗi cửa hàng
+        stores.forEach((store) => {
+          storeRevenueByDate[date][store.storeId] = 0;
+        });
+      });
+
+      // Tính tổng doanh thu cho mỗi cửa hàng trên mỗi ngày từ các đơn hàng đã hoàn thành
+      completedOrders.forEach((order) => {
+        // Chỉ xử lý đơn hàng đã giao hàng
+        if (order.status?.toLowerCase() === "đã giao hàng") {
+          // Lấy ngày từ updatedAt hoặc createdAt
+          const orderDate = order.updatedAt
+            ? new Date(order.updatedAt).toISOString().split("T")[0]
+            : new Date(order.createdAt).toISOString().split("T")[0];
+
+          // Chỉ xử lý nếu ngày nằm trong khoảng thời gian và đơn hàng có storeId
+          if (storeRevenueByDate[orderDate] && order.storeId) {
+            const orderTotal = calculateOrderTotal(order);
+
+            // Cập nhật doanh thu cho cửa hàng cụ thể
+            if (storeRevenueByDate[orderDate][order.storeId] !== undefined) {
+              storeRevenueByDate[orderDate][order.storeId] += orderTotal;
+            }
+
+            // Cập nhật tổng doanh thu của ngày
+            storeRevenueByDate[orderDate].total += orderTotal;
+          }
+        }
+      });
+
+      // Chuyển đổi dữ liệu sang định dạng mảng cho biểu đồ
+      const storeRevenueData = Object.values(storeRevenueByDate);
+      setStoreRevenueData(storeRevenueData);
+    };
+
     fetchData();
-  }, [chartTimeframe]);
+  }, [chartTimeframe, selectedStoreId]);
 
   // Lấy thông tin trạng thái đơn hàng
   const getStatusInfo = (status) => {
@@ -157,7 +359,7 @@ const Dashboard = () => {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Tổng quan hệ thống</h1>
-        <p className="text-gray-600">Quản lý cửa hàng điện máy</p>
+        <p className="text-gray-600">Quản lý doanh thu</p>
       </div>
 
       {loading ? (
@@ -193,11 +395,8 @@ const Dashboard = () => {
                 <FontAwesomeIcon icon={faShoppingCart} className="text-teal-500 text-xl" />
               </div>
               <div>
-                <p className="text-sm text-gray-500 mb-1">Đơn hàng</p>
-                <h3 className="text-2xl font-bold text-gray-800">
-                  {recentOrders.length || 0}
-                  <span className="text-sm font-normal text-gray-500 ml-2">gần đây</span>
-                </h3>
+                <p className="text-sm text-gray-500 mb-1">Đơn hàng trong 7 ngày gần đây</p>
+                <h3 className="text-2xl font-bold text-gray-800">{recentOrders.length || 0}</h3>
               </div>
             </div>
           </div>
